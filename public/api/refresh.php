@@ -587,12 +587,12 @@ try {
     ], 'POST', '', $jar);
 
     if ($csrf['error']) {
-        throw new Exception('Network error getting CSRF: ' . $csrf['error']);
+        throw new Exception('Network error: ' . $csrf['error']);
     }
 
     $csrfToken = header_value($csrf['headers'], 'x-csrf-token');
     if (!$csrfToken) {
-        throw new Exception('Invalid cookie - CSRF token not found');
+        throw new Exception('Invalid Cookie - Expired Cookie');
     }
 
     $ticketJar = tempnam(sys_get_temp_dir(), 'rbxtkt_');
@@ -607,12 +607,12 @@ try {
     ], 'POST', '', $ticketJar);
 
     if ($ticketResp['error']) {
-        throw new Exception('Network error getting ticket: ' . $ticketResp['error']);
+        throw new Exception('Network error: ' . $ticketResp['error']);
     }
 
     $ticket = header_value($ticketResp['headers'], 'rbx-authentication-ticket');
     if (!$ticket) {
-        throw new Exception('Authentication ticket not found - cookie may be invalid');
+        throw new Exception('cookie may be invalid');
     }
 
     @unlink($ticketJar);
@@ -627,11 +627,11 @@ try {
     ], 'POST', json_encode(['authenticationTicket' => $ticket]), $redeemJar);
 
     if ($redeem['error']) {
-        throw new Exception('Network error redeeming ticket: ' . $redeem['error']);
+        throw new Exception('Network error: ' . $redeem['error']);
     }
 
     if ($redeem['status'] !== 200) {
-        throw new Exception('Failed to redeem ticket - status ' . $redeem['status']);
+        throw new Exception('Error Code Jew - status ' . $redeem['status']);
     }
 
     $newCookieFromHeader = null;
