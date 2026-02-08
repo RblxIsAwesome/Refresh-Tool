@@ -121,25 +121,6 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
             color: var(--text-secondary);
         }
 
-        .logout-btn {
-            background: rgba(240, 85, 85, 0.1);
-            color: var(--error);
-            border: 1px solid rgba(240, 85, 85, 0.2);
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-        .logout-btn:hover {
-            background: rgba(240, 85, 85, 0.15);
-            border-color: rgba(240, 85, 85, 0.3);
-        }
-
         /* Main Card */
         .main-card {
             background: linear-gradient(180deg, var(--card-bg), rgba(255, 255, 255, 0.045));
@@ -637,3 +618,4 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
     </script>
 </body>
 </html>
+
