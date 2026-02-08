@@ -10,6 +10,22 @@ define('RATE_LIMIT_FILE', sys_get_temp_dir() . '/rate_limits.json');
 define('IP_BAN_FILE', sys_get_temp_dir() . '/ip_bans.json');
 
 /**
+ * Get user's real IP address
+ * Handles Cloudflare and proxy headers
+ */
+if (!function_exists('getUserIP')) {
+    function getUserIP() {
+        if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+            return $_SERVER['HTTP_CF_CONNECTING_IP'];
+        }
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            return explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+        }
+        return $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+    }
+}
+
+/**
  * Check if IP is banned
  */
 function checkIPBan() {
@@ -119,18 +135,5 @@ function banIP($ip, $duration = 3600) {
     file_put_contents(IP_BAN_FILE, json_encode($bans));
     
     error_log("IP banned: $ip for $duration seconds");
-}
-
-/**
- * Get user's real IP address
- */
-function getUserIP() {
-    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-        return $_SERVER['HTTP_CF_CONNECTING_IP'];
-    }
-    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        return explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
-    }
-    return $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
 }
 ?>
