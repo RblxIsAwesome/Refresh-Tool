@@ -2,151 +2,135 @@
 /**
  * Rate Limiting & IP Ban System
  * 
- * Prevents abuse by limiting requests per IP and banning malicious IPs.
- * 
- * @package RobloxRefresher
- * @author  Your Name
- * @version 1.0.0
+ * Prevents abuse by limiting requests per IP address
  */
 
-// Storage file paths
-define('RATE_LIMIT_FILE', __DIR__ . '/../storage/rate_limits.json');
-define('IP_BAN_FILE', __DIR__ . '/../storage/ip_bans.json');
-
-/**
- * Get user's real IP address
- * 
- * @return string IP address
- */
-function getUserIP() {
-    // Check for Cloudflare
-    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-        return $_SERVER['HTTP_CF_CONNECTING_IP'];
-    }
-    
-    // Check for proxy
-    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        $ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-        return trim($ips[0]);
-    }
-    
-    // Direct connection
-    return $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
-}
+// Rate limit storage file
+define('RATE_LIMIT_FILE', __DIR__ . '/../../storage/rate_limits.json');
+define('IP_BAN_FILE', __DIR__ . '/../../storage/ip_bans.json');
 
 /**
  * Check if IP is banned
- * 
- * @throws Exception if IP is banned
  */
 function checkIPBan() {
     $ip = getUserIP();
     
     if (!file_exists(IP_BAN_FILE)) {
+        file_put_contents(IP_BAN_FILE, json_encode([]));
         return;
     }
     
     $bans = json_decode(file_get_contents(IP_BAN_FILE), true) ?: [];
     
     if (isset($bans[$ip])) {
-        $ban = $bans[$ip];
+        $banData = $bans[$ip];
+        $banExpiry = $banData['expiry'] ?? 0;
         
-        // Check if ban has expired
-        if (isset($ban['expires']) && $ban['expires'] > time()) {
-            $expiresIn = round(($ban['expires'] - time()) / 60);
-            throw new Exception("Your IP has been temporarily banned. Try again in {$expiresIn} minutes.");
-        } elseif (!isset($ban['expires'])) {
-            // Permanent ban
-            throw new Exception('Your IP has been permanently banned for abuse.');
+        if (time() < $banExpiry) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode([
+                'error' => 'Your IP has been temporarily banned due to suspicious activity',
+                'ban_expires' => date('Y-m-d H:i:s', $banExpiry)
+            ]);
+            exit;
         } else {
             // Ban expired, remove it
             unset($bans[$ip]);
-            file_put_contents(IP_BAN_FILE, json_encode($bans, JSON_PRETTY_PRINT));
+            file_put_contents(IP_BAN_FILE, json_encode($bans));
         }
     }
 }
 
 /**
- * Check rate limit for current IP
+ * Check rate limit for IP
  * 
  * @param int $maxRequests Maximum requests allowed
  * @param int $timeWindow Time window in seconds
- * @throws Exception if rate limit exceeded
  */
 function checkRateLimit($maxRequests = 3, $timeWindow = 60) {
     $ip = getUserIP();
-    $currentTime = time();
     
-    // Load existing rate limits
-    $rateLimits = [];
-    if (file_exists(RATE_LIMIT_FILE)) {
-        $rateLimits = json_decode(file_get_contents(RATE_LIMIT_FILE), true) ?: [];
+    if (!file_exists(RATE_LIMIT_FILE)) {
+        file_put_contents(RATE_LIMIT_FILE, json_encode([]));
     }
     
-    // Clean up old entries
-    $rateLimits = array_filter($rateLimits, function($data) use ($currentTime, $timeWindow) {
-        return ($currentTime - ($data['first_request'] ?? 0)) < $timeWindow;
-    });
+    $rateLimits = json_decode(file_get_contents(RATE_LIMIT_FILE), true) ?: [];
     
-    // Initialize or update IP record
-    if (!isset($rateLimits[$ip])) {
-        $rateLimits[$ip] = [
-            'count' => 1,
-            'first_request' => $currentTime,
-            'last_request' => $currentTime
-        ];
-    } else {
-        $rateLimits[$ip]['count']++;
-        $rateLimits[$ip]['last_request'] = $currentTime;
-        
-        // Check if limit exceeded
-        if ($rateLimits[$ip]['count'] > $maxRequests) {
-            $elapsed = $currentTime - $rateLimits[$ip]['first_request'];
-            
-            if ($elapsed < $timeWindow) {
-                $waitTime = $timeWindow - $elapsed;
-                
-                // Ban IP if too many violations
-                if ($rateLimits[$ip]['count'] > ($maxRequests * 3)) {
-                    banIP($ip, 3600); // Ban for 1 hour
-                    throw new Exception('Rate limit exceeded multiple times. Your IP has been temporarily banned.');
-                }
-                
-                throw new Exception("Rate limit exceeded. Please wait {$waitTime} seconds before trying again.");
-            }
-            
-            // Reset counter after time window
-            $rateLimits[$ip] = [
-                'count' => 1,
-                'first_request' => $currentTime,
-                'last_request' => $currentTime
-            ];
+    $currentTime = time();
+    
+    // Clean old entries
+    foreach ($rateLimits as $rip => $data) {
+        if ($currentTime - $data['first_request'] > $timeWindow) {
+            unset($rateLimits[$rip]);
         }
     }
     
-    // Save updated rate limits
-    file_put_contents(RATE_LIMIT_FILE, json_encode($rateLimits, JSON_PRETTY_PRINT));
+    // Check current IP
+    if (!isset($rateLimits[$ip])) {
+        $rateLimits[$ip] = [
+            'count' => 1,
+            'first_request' => $currentTime
+        ];
+    } else {
+        $rateLimits[$ip]['count']++;
+        
+        // Check if exceeded
+        if ($rateLimits[$ip]['count'] > $maxRequests) {
+            $timeLeft = $timeWindow - ($currentTime - $rateLimits[$ip]['first_request']);
+            
+            // Ban if too many violations
+            if ($rateLimits[$ip]['count'] > $maxRequests * 3) {
+                banIP($ip, 3600); // Ban for 1 hour
+            }
+            
+            http_response_code(429);
+            header('Content-Type: application/json');
+            echo json_encode([
+                'error' => 'Rate limit exceeded. Please wait before trying again.',
+                'retry_after' => max(1, $timeLeft)
+            ]);
+            exit;
+        }
+    }
+    
+    file_put_contents(RATE_LIMIT_FILE, json_encode($rateLimits));
 }
 
 /**
  * Ban an IP address
  * 
  * @param string $ip IP address to ban
- * @param int|null $duration Ban duration in seconds (null for permanent)
+ * @param int $duration Ban duration in seconds
  */
-function banIP($ip, $duration = null) {
-    $bans = [];
-    if (file_exists(IP_BAN_FILE)) {
-        $bans = json_decode(file_get_contents(IP_BAN_FILE), true) ?: [];
+function banIP($ip, $duration = 3600) {
+    if (!file_exists(IP_BAN_FILE)) {
+        file_put_contents(IP_BAN_FILE, json_encode([]));
     }
+    
+    $bans = json_decode(file_get_contents(IP_BAN_FILE), true) ?: [];
     
     $bans[$ip] = [
         'banned_at' => time(),
-        'expires' => $duration ? (time() + $duration) : null,
-        'reason' => 'Rate limit abuse'
+        'expiry' => time() + $duration,
+        'reason' => 'Rate limit exceeded'
     ];
     
-    file_put_contents(IP_BAN_FILE, json_encode($bans, JSON_PRETTY_PRINT));
+    file_put_contents(IP_BAN_FILE, json_encode($bans));
     
-    error_log("Banned IP: {$ip} for " . ($duration ? "{$duration}s" : "permanently"));
+    error_log("IP banned: $ip for $duration seconds");
 }
+
+/**
+ * Get user's real IP address
+ */
+function getUserIP() {
+    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+        return $_SERVER['HTTP_CF_CONNECTING_IP'];
+    }
+    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        return explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+}
+?>
