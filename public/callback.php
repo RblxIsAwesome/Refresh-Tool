@@ -141,7 +141,35 @@ if (!$userResult['success'] || !isset($userResult['data']['id'])) {
 
 $user = $userResult['data'];
 
-// Step 3: Create persistent session
+// Step 3: Save/update user in database
+require_once __DIR__ . '/../config/database.php';
+
+try {
+    if (Database::isAvailable()) {
+        $stmt = Database::execute(
+            "INSERT INTO users (id, username, discriminator, avatar, email, last_login) 
+             VALUES (?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE 
+                 username = VALUES(username),
+                 discriminator = VALUES(discriminator),
+                 avatar = VALUES(avatar),
+                 email = VALUES(email),
+                 last_login = NOW()",
+            [
+                $user['id'],
+                $user['username'],
+                $user['discriminator'] ?? '0',
+                $user['avatar'],
+                $user['email'] ?? null
+            ]
+        );
+    }
+} catch (Exception $e) {
+    // Log error but don't fail login
+    error_log("Failed to save user to database: " . $e->getMessage());
+}
+
+// Step 4: Create persistent session
 $_SESSION['discord_user'] = [
     'id' => $user['id'],
     'username' => $user['username'],

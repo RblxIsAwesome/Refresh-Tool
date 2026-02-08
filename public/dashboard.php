@@ -37,6 +37,14 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Roblox cookie refresher dashboard">
     <title>Dashboard - Roblox Cookie Refresher</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="alternate icon" href="/favicon.svg" type="image/svg+xml">
+    
+    <!-- External Stylesheets -->
+    <link rel="stylesheet" href="/assets/css/animations.css">
+    
     <style>
         /* CSS Variables */
         :root {
@@ -119,6 +127,43 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
         .user-status {
             font-size: 13px;
             color: var(--text-secondary);
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-link,
+        .logout-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link {
+            color: var(--accent-blue);
+            background: rgba(124, 182, 255, 0.1);
+            border: 1px solid rgba(124, 182, 255, 0.2);
+        }
+
+        .nav-link:hover {
+            background: rgba(124, 182, 255, 0.15);
+            border-color: rgba(124, 182, 255, 0.3);
+        }
+
+        .logout-btn {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--card-border);
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
         /* Main Card */
@@ -337,42 +382,9 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
         }
 
         /* ================================================
-           LOADING OVERLAY - Blurred Background
+           LOADING OVERLAY - Enhanced with animations.css
            ================================================ */
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(7, 10, 18, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .loading-overlay.active {
-            display: flex;
-            opacity: 1;
-        }
-
-        .spinner {
-            width: 64px;
-            height: 64px;
-            border: 4px solid rgba(124, 182, 255, 0.15);
-            border-top-color: var(--accent-blue);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        /* Note: Loading overlay styles are in animations.css */
 
         /* Footer */
         .footer {
@@ -433,7 +445,10 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
                     <div class="user-status">Logged in with Discord</div>
                 </div>
             </div>
-            <a href="logout.php" class="logout-btn">Logout</a>
+            <div class="nav-right">
+                <a href="analytics.php" class="nav-link">📊 Analytics</a>
+                <a href="logout.php" class="logout-btn">Logout</a>
+            </div>
         </nav>
 
         <!-- Main Card -->
@@ -466,7 +481,7 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
                     <div class="result-title">Cookie Refreshed Successfully!</div>
                 </div>
                 <div class="result-content" id="newCookie"></div>
-                <button class="copy-btn" onclick="copyCookie()">Copy to Clipboard</button>
+                <button class="copy-btn" onclick="copyCookie(event)">Copy to Clipboard</button>
                 
                 <!-- User Data -->
                 <div class="user-data-grid" id="userData"></div>
@@ -488,25 +503,92 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
         </div>
     </div>
 
-    <!-- Loading Overlay -->
+    <!-- Loading Overlay with Progress -->
     <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner"></div>
+        <div class="spinner-gradient"></div>
+        <div class="loading-progress">
+            <div class="progress-text" id="progressText">Validating cookie...</div>
+            <div class="progress-steps">
+                <div class="progress-step" id="step1"></div>
+                <div class="progress-step" id="step2"></div>
+                <div class="progress-step" id="step3"></div>
+                <div class="progress-step" id="step4"></div>
+            </div>
+        </div>
     </div>
+
+    <!-- External Scripts -->
+    <script src="/assets/js/validator.js"></script>
 
     <script>
         let refreshedCookie = '';
+        let validator = null;
+        let currentStep = 0;
+        const progressSteps = [
+            'Validating cookie...',
+            'Refreshing cookie...',
+            'Fetching user data...',
+            'Complete!'
+        ];
+
+        // Initialize cookie validator on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const cookieInput = document.getElementById('cookieInput');
+            validator = new CookieValidator(cookieInput, {
+                minLength: 1024,
+                showCounter: true
+            });
+
+            // Add ripple effect to buttons
+            const copyBtn = document.querySelector('.copy-btn');
+            if (copyBtn) {
+                CookieValidatorUtils.addRippleEffect(copyBtn);
+            }
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                CookieValidatorUtils.addRippleEffect(refreshBtn);
+            }
+        });
+
+        function updateProgress(step) {
+            currentStep = step;
+            const progressText = document.getElementById('progressText');
+            if (progressText && step < progressSteps.length) {
+                progressText.textContent = progressSteps[step];
+            }
+
+            // Update progress step indicators
+            for (let i = 1; i <= 4; i++) {
+                const stepEl = document.getElementById(`step${i}`);
+                if (stepEl) {
+                    if (i < step) {
+                        stepEl.className = 'progress-step completed';
+                    } else if (i === step) {
+                        stepEl.className = 'progress-step active';
+                    } else {
+                        stepEl.className = 'progress-step';
+                    }
+                }
+            }
+        }
 
         function showLoading() {
             document.getElementById('loadingOverlay').classList.add('active');
+            updateProgress(1);
         }
 
         function hideLoading() {
-            document.getElementById('loadingOverlay').classList.remove('active');
+            updateProgress(4);
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').classList.remove('active');
+                currentStep = 0;
+            }, 500);
         }
 
         function showSuccess(data) {
             document.getElementById('errorResult').classList.remove('show');
-            document.getElementById('successResult').classList.add('show');
+            const successCard = document.getElementById('successResult');
+            successCard.classList.add('show');
             document.getElementById('newCookie').textContent = data.cookie;
             refreshedCookie = data.cookie;
 
@@ -545,8 +627,14 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
 
         function showError(message) {
             document.getElementById('successResult').classList.remove('show');
-            document.getElementById('errorResult').classList.add('show');
+            const errorCard = document.getElementById('errorResult');
+            errorCard.classList.add('show', 'error-shake');
             document.getElementById('errorMessage').textContent = message;
+            
+            // Remove shake animation after it completes
+            setTimeout(() => {
+                errorCard.classList.remove('error-shake');
+            }, 500);
         }
 
         async function refreshCookie(event) {
@@ -559,6 +647,12 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
                 showError('Please enter a cookie');
                 return;
             }
+            
+            // Validate cookie before sending
+            if (validator && !validator.isValid()) {
+                showError('Please enter a valid cookie format');
+                return;
+            }
 
             // Disable button and show loading
             refreshBtn.disabled = true;
@@ -566,6 +660,9 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
             showLoading();
 
             try {
+                // Step 2: Refreshing
+                setTimeout(() => updateProgress(2), 500);
+                
                 const response = await fetch('/api/refresh.php', {
                     method: 'POST',
                     headers: {
@@ -574,6 +671,9 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
                     body: `cookie=${encodeURIComponent(cookieInput)}`
                 });
 
+                // Step 3: Fetching data
+                updateProgress(3);
+                
                 const data = await response.json();
 
                 hideLoading();
@@ -593,27 +693,11 @@ $username = htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8');
             }
         }
 
-        function copyCookie() {
+        function copyCookie(event) {
             if (!refreshedCookie) return;
-
-            navigator.clipboard.writeText(refreshedCookie).then(() => {
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
-                btn.style.background = 'rgba(41, 194, 127, 0.2)';
-                btn.style.color = 'var(--success)';
-                btn.style.borderColor = 'rgba(41, 194, 127, 0.3)';
-
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = 'rgba(124, 182, 255, 0.1)';
-                    btn.style.color = 'var(--accent-blue)';
-                    btn.style.borderColor = 'rgba(124, 182, 255, 0.2)';
-                }, 2000);
-            }).catch(err => {
-                showError('Failed to copy to clipboard');
-                console.error('Copy failed:', err);
-            });
+            
+            const btn = event.target;
+            CookieValidatorUtils.copyToClipboard(refreshedCookie, btn);
         }
     </script>
 </body>
