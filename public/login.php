@@ -1,4 +1,7 @@
 <?php
+// Start session with long lifetime
+ini_set('session.gc_maxlifetime', 2592000);
+session_set_cookie_params(2592000);
 session_start();
 
 function parse_env(): array {
@@ -185,7 +188,7 @@ $authUrl = 'https://discord.com/api/oauth2/authorize?' . http_build_query([
           </svg>
           <div class="security-note-text">
             <strong>Secure OAuth2 Authentication</strong><br>
-            We'll redirect you to Discord to authorize access. We only request your basic profile information (username, ID, email).
+            We'll redirect you to Discord to authorize access. Your session will be remembered for 30 days.
           </div>
         </div>
 
@@ -206,7 +209,7 @@ $authUrl = 'https://discord.com/api/oauth2/authorize?' . http_build_query([
             <svg viewBox="0 0 16 16" fill="currentColor">
               <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.97 4.97a.75.75 0 00-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 00-1.06 1.06L6.97 11.03a.75.75 0 001.079-.02l3.992-4.99a.75.75 0 00-.01-1.05z"/>
             </svg>
-            <span>Instant access</span>
+            <span>Stay logged in</span>
           </div>
         </div>
       </div>
